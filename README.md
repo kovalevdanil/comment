@@ -8,3 +8,5 @@ flags: <br/>
 -d FILENAME - to delete comment associated with file FILENAME <br/>
 
 ### how to install 
+To compile use `gcc -o comment comment.c`.
+Then just copy compiled file to the directory with your commands.
