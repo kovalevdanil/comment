@@ -1,5 +1,5 @@
 # comment
-the utility allows you to comment file <br/>
+the utility allows you to comment files <br/>
 Usage: comment [flag] FILENAME <br/>
 flags: <br/>
 -r FILENAME - to read the comment (or without '-r' flag, if comment exists) <br/>
