@@ -26,7 +26,23 @@ void failure()
  */
 
 typedef enum {READ, WRITE, APPEND, DELETE, NOP} Action;
-typedef enum {SUCCESS, FAIL} ActionResult;
+typedef enum 
+{
+	SUCCESS, FAIL, 
+	STATEMENT_WRONG_ARGUMENTS,
+	STATEMENT_UNKNOW_FLAG,
+	STATEMENT_MAX_LEN_OF_FILE,
+	STATEMENT_TARGET_FILE_DOESNT_EXIST
+
+} ActionResult;
+
+typedef struct
+{
+	char *filename;
+	off_t file_size;
+	Action action;
+} Statement;
+
 
 ActionResult execute_read(int fd)
 {
@@ -57,6 +73,7 @@ ActionResult execute_append(int fd, char *buffer, int size)
 
 	return SUCCESS;
 }
+
 ActionResult execute_delete(char *filename)
 {
 	if (remove(filename) == -1)
@@ -64,21 +81,19 @@ ActionResult execute_delete(char *filename)
 	return SUCCESS;
 }
 
-typedef struct
+void add_postfix(char *buffer, char* s1)
 {
-	char *filename;
-	off_t file_size;
-	Action action;
-} Statement;
+	int s1_len = strlen(s1);
+	strcpy(buffer , s1);
+	strcpy(buffer + s1_len, POSTFIX);
+	buffer[s1_len + POSTFIX_SIZE] = 0;
+}
 
 ActionResult execute_statement(Statement *statement)
 {
-	int name_len = strlen(statement -> filename);
-	char comment_filename[255 + POSTFIX_SIZE + 1];
-	strcpy(comment_filename, statement -> filename);
-	strcpy(comment_filename + name_len, POSTFIX);
-	comment_filename[name_len + POSTFIX_SIZE] = 0;
-	
+	char comment_filename[255];
+	add_postfix(comment_filename, statement -> filename);
+
 	int fd = open(comment_filename, O_CREAT | O_RDWR, 0644);
 	if (fd == -1)
 		return FAIL;	
@@ -93,7 +108,7 @@ ActionResult execute_statement(Statement *statement)
 	char buffer[256];
 	switch(statement -> action)
 	{
-		case READ: 	return execute_read(fd);
+		case READ: return execute_read(fd);
 		case WRITE: 	
 		{
 			int bytes_read = read(STDIN_FILENO, buffer, 256);
@@ -114,7 +129,7 @@ ActionResult execute_statement(Statement *statement)
 ActionResult prepare_statement(Statement *statement, int argc, char **argv)
 {
 	if (argc > 3 || argc == 1)
-		return FAIL;
+		return STATEMENT_WRONG_ARGUMENTS; 
 
 	statement -> action = NOP;
 	statement -> filename = NULL;
@@ -124,7 +139,7 @@ ActionResult prepare_statement(Statement *statement, int argc, char **argv)
 		if (argv[i][0] == '-')
 		{
 			if (statement -> action != NOP)
-				return FAIL;
+				return STATEMENT_WRONG_ARGUMENTS;
 
 			if (strcmp(argv[i], READ_FLAG) == 0)
 			       	statement -> action = READ;
@@ -135,16 +150,16 @@ ActionResult prepare_statement(Statement *statement, int argc, char **argv)
 			else if (strcmp(argv[i], DELETE_FLAG) == 0)
 				statement -> action = DELETE;
 			else 
-				return FAIL;	
+				return STATEMENT_UNKNOW_FLAG;	
 		}
 		else 
 		{
 			if (statement -> filename != NULL)
-				return FAIL;
+				return STATEMENT_WRONG_ARGUMENTS; 
 			
 			int len = strlen(argv[i]);
 			if (len > 255)
-				return FAIL;
+				return STATEMENT_MAX_LEN_OF_FILE;
 			
 			statement -> filename = malloc(len + 1);
 			strcpy(statement -> filename, argv[i]);
@@ -153,11 +168,11 @@ ActionResult prepare_statement(Statement *statement, int argc, char **argv)
 	}
 
 	if (statement -> filename == NULL)
-		return FAIL;
+		return STATEMENT_WRONG_ARGUMENTS;
 
 	struct stat st;
 	if (stat(statement -> filename, &st) == -1)
-		return FAIL;
+		return STATEMENT_TARGET_FILE_DOESNT_EXIST;
 
 	return SUCCESS;
 }
@@ -165,10 +180,22 @@ ActionResult prepare_statement(Statement *statement, int argc, char **argv)
 int main(int argc, char **argv)
 {
 	Statement statement;
-	if (prepare_statement(&statement, argc, argv) == FAIL)
+	ActionResult prepare_result = prepare_statement(&statement, argc, argv);
+	switch(prepare_result)
 	{
-		printf("prepare_statement failed\n");
-		exit(EXIT_FAILURE);
+		case STATEMENT_WRONG_ARGUMENTS: 
+			printf("Usage: comment [flag] FILENAME\n");
+			exit(EXIT_FAILURE);
+		case STATEMENT_UNKNOW_FLAG:
+			printf("Wrong flag. Allowed flags:\n'-r' - read\n'-d' - delete\n'-a' - append\n'-w' - write\n");
+			exit(EXIT_FAILURE);
+		case STATEMENT_MAX_LEN_OF_FILE:
+			printf("Name of fiile can't be longer than 255 characters\n");
+			exit(EXIT_FAILURE);
+		case STATEMENT_TARGET_FILE_DOESNT_EXIST:
+			printf("File '%s' doesn't exist\n", statement.filename);
+			exit(EXIT_FAILURE);
+		case SUCCESS: break; 
 	}
 
 	// check if directory .comments exists, if it's not - create and enter one
